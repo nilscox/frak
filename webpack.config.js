@@ -1,7 +1,7 @@
 /* eslint-disable */
 
 const path = require('path');
-const { EnvironmentPlugin, HotModuleReplacementPlugin, ProvidePlugin } = require('webpack');
+const { EnvironmentPlugin, ProvidePlugin } = require('webpack');
 const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
@@ -12,10 +12,13 @@ const config = (module.exports = {
   mode: 'development',
   devtool: 'source-map',
 
-  entry: './src/index.tsx',
+  entry: {
+    main: './src/index.tsx',
+    worker: './src/worker.ts',
+  },
 
   output: {
-    filename: '[name].[contenthash].js',
+    filename: '[name].js',
     path: path.resolve(__dirname, 'dist'),
   },
 
@@ -44,7 +47,7 @@ const config = (module.exports = {
     //
     new EnvironmentPlugin(),
     new ProvidePlugin({ React: 'react' }),
-    new HtmlWebpackPlugin(),
+    new HtmlWebpackPlugin({ chunks: ['main'] }),
   ],
 });
 
@@ -54,6 +57,9 @@ if (NODE_ENV === 'development') {
   config.devServer = {
     host: HOST,
     port: Number(PORT),
+    client: {
+      logging: 'warn',
+    },
   };
 }
 
