@@ -33,6 +33,10 @@ const config = (module.exports = {
           target: 'es6',
         },
       },
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      },
     ],
   },
 
