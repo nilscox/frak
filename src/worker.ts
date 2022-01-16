@@ -1,19 +1,35 @@
-console.log('worker!');
+import type { WorkerParams } from './Mandelbrot';
 
-type Message = {
-  x: number;
-  y: number;
+const normalize = (min: number, max: number, value: number) => {
+  return (value - min) / (max - min);
 };
 
-onmessage = async (e: MessageEvent<Message>) => {
-  const { x, y } = e.data;
+onmessage = async ({ data: params }: MessageEvent<WorkerParams>) => {
+  const { view, zoom, iter } = params;
+  const result: Array<{ x: number; y: number; value: number }> = [];
 
-  for (let i = 0; i < 100; ++i) {
-    console.log('computing ' + i);
-    await new Promise((r) => setTimeout(r, 0));
+  for (let x = view.x.min; x <= view.x.max; x += view.x.step) {
+    postMessage({ type: 'progress', progress: normalize(view.x.min, view.x.max, x) });
+
+    for (let y = view.y.min; y <= view.y.max; y += view.y.step) {
+      const cr = x / zoom + params.center.re;
+      const ci = y / zoom + params.center.im;
+
+      let zr = 0;
+      let zi = 0;
+
+      let n = 0;
+
+      do {
+        const t = zr;
+
+        zr = zr * zr - zi * zi + cr;
+        zi = 2 * t * zi + ci;
+      } while (++n < iter && zr * zr + zi * zi <= 4);
+
+      result.push({ x, y, value: n / iter });
+    }
   }
 
-  console.log('computation terminated');
-
-  postMessage(x + y);
+  postMessage({ type: 'result', values: result });
 };

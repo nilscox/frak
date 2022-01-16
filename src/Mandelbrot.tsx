@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { HTMLProps, useEffect, useRef } from 'react';
+
+let worker: Worker | null = null;
 
 export type MandelbrotParams = {
   x: number;
@@ -6,78 +8,117 @@ export type MandelbrotParams = {
   zoom: number;
   iter: number;
   resolution: number;
-  palette: (n: number) => string;
 };
 
-function draw(canvas: HTMLCanvasElement, params: MandelbrotParams) {
-  const { zoom, iter } = params;
+type Range = {
+  min: number;
+  max: number;
+  step: number;
+};
+
+type Complex = {
+  re: number;
+  im: number;
+};
+
+export type WorkerParams = {
+  view: {
+    x: Range;
+    y: Range;
+  };
+  center: Complex;
+  zoom: number;
+  iter: number;
+};
+
+function draw(
+  canvas: HTMLCanvasElement,
+  params: MandelbrotParams,
+  getColor: (n: number) => string,
+  onProgress: (progress: number) => void,
+  onDrawEnd: () => void,
+) {
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  console.time('draw');
-
-  for (let x = 0; x < canvas.width; x += params.resolution) {
-    for (let y = 0; y < canvas.height; y += params.resolution) {
-      const cr = (x - canvas.width / 2) / zoom + params.x;
-      const ci = (y - canvas.height / 2) / zoom + params.y;
-
-      let zr = 0;
-      let zi = 0;
-
-      let n = 0;
-
-      do {
-        const t = zr;
-
-        zr = zr * zr - zi * zi + cr;
-        zi = 2 * t * zi + ci;
-      } while (++n < iter && zr * zr + zi * zi <= 4);
-
-      if (n === iter) {
-        ctx.fillStyle = '#000000';
-      } else {
-        ctx.fillStyle = params.palette(n / iter);
-      }
-
-      ctx.fillRect(x, y, params.resolution, params.resolution);
-    }
+  if (worker) {
+    worker.terminate();
   }
 
-  console.timeEnd('draw');
+  worker = new Worker('worker.js');
+
+  const workerParams: WorkerParams = {
+    view: {
+      x: {
+        min: -canvas.width / 2,
+        max: canvas.width / 2,
+        step: params.resolution,
+      },
+      y: {
+        min: -canvas.height / 2,
+        max: canvas.height / 2,
+        step: params.resolution,
+      },
+    },
+    center: {
+      re: params.x,
+      im: params.y,
+    },
+    zoom: params.zoom,
+    iter: params.iter,
+  };
+
+  worker.postMessage(workerParams);
+
+  worker.onmessage = (e) => {
+    if (e.data.type === 'progress') {
+      onProgress(e.data.progress);
+      return;
+    }
+
+    if (e.data.type !== 'result') {
+      return;
+    }
+
+    const values: Array<{ x: number; y: number; value: number }> = e.data.values;
+
+    for (const { x, y, value } of values) {
+      ctx.fillStyle = value === 1 ? '#000' : getColor(value);
+
+      ctx.fillRect(
+        x - workerParams.view.x.min,
+        y - workerParams.view.y.min,
+        params.resolution,
+        params.resolution,
+      );
+    }
+
+    onDrawEnd();
+  };
 }
 
-type MandelbrotProps = {
-  width: number;
-  height: number;
+type MandelbrotProps = HTMLProps<HTMLCanvasElement> & {
   params: MandelbrotParams;
-  onKeyDown: (key: string) => void;
+  getColor: (n: number) => string;
+  onDrawProgress: (progress: number) => void;
   onDrawEnd: () => void;
 };
 
-export const Mandelbrot: React.FC<MandelbrotProps> = ({ width, height, params, onKeyDown, onDrawEnd }) => {
-  const [canvasRef, setCanvasRef] = useState<HTMLCanvasElement | null>(null);
+export const Mandelbrot: React.FC<MandelbrotProps> = ({
+  params,
+  getColor,
+  onDrawProgress,
+  onDrawEnd,
+  ...props
+}) => {
+  const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!canvasRef) {
+    if (!ref.current) {
       return;
     }
 
-    const handler = (event: any) => onKeyDown(event.key);
+    draw(ref.current, params, getColor, onDrawProgress, onDrawEnd);
+  }, [ref, params, getColor, onDrawProgress, onDrawEnd]);
 
-    canvasRef.addEventListener('keydown', handler);
-
-    return () => canvasRef.removeEventListener('keydown', handler);
-  }, [canvasRef, onKeyDown, params]);
-
-  useEffect(() => {
-    if (!canvasRef) {
-      return;
-    }
-
-    draw(canvasRef, params);
-    onDrawEnd();
-  }, [canvasRef, onKeyDown, params, onDrawEnd]);
-
-  return <canvas ref={setCanvasRef} width={width} height={height} tabIndex={0} />;
+  return <canvas ref={ref} {...props} />;
 };

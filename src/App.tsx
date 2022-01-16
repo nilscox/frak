@@ -1,99 +1,138 @@
-import { useCallback, useEffect, useState } from 'react';
+import { KeyboardEventHandler, useCallback, useMemo, useReducer, useState, WheelEventHandler } from 'react';
 
 import { Mandelbrot, MandelbrotParams } from './Mandelbrot';
 import { createPalette } from './palette';
 
-const somePoint = {
+type Color = [number, number, number];
+
+const usePalette = (colors: Record<number, Color>) => {
+  const palette = useMemo(() => createPalette(colors), [colors]);
+
+  return useCallback(
+    (n: number) => {
+      const [r, g, b] = palette(n).map((n) => n * 255);
+      return `rgb(${r}, ${g}, ${b})`;
+    },
+    [palette],
+  );
+};
+
+const useMandelbrotParams = (initialParams: MandelbrotParams) => {
+  return useReducer(
+    (state: MandelbrotParams, action: Partial<MandelbrotParams>) => ({
+      ...state,
+      resolution: initialParams.resolution,
+      ...action,
+    }),
+    initialParams,
+  );
+};
+
+const defaultParams: MandelbrotParams = {
+  x: -0.6,
+  y: 0,
+  iter: 50,
+  zoom: 200,
+  resolution: 2 << 2,
+};
+
+const somePoint: MandelbrotParams = {
+  ...defaultParams,
   x: -0.6702068252714215,
   y: -0.4580758991502661,
   zoom: 20000000000000000,
   iter: 700,
 };
 
+const colors: Record<number, Color> = {
+  0: [1, 1, 1],
+  0.1: [1, 0, 0],
+  0.2: [0, 1, 0],
+  0.3: [0, 0, 1],
+  0.4: [1, 1, 0],
+  0.5: [1, 0, 1],
+  0.6: [0, 1, 1],
+  0.7: [1, 0, 0],
+  0.8: [0, 1, 0],
+  0.9: [0, 0, 1],
+  1: [1, 1, 1],
+};
+
 export const App: React.FC = () => {
-  const [x, setX] = useState(-0.6);
-  const [y, setY] = useState(0);
-  const [iter, setIter] = useState(50);
-  const [zoom, setZoom] = useState(200);
-  const [resolution, setResolution] = useState(1);
-  const [colorOffset, setColorOffset] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [params, setParams] = useMandelbrotParams(defaultParams);
+  const getColor = usePalette(colors);
 
-  useEffect(() => {
-    return;
-    setX(somePoint.x);
-    setY(somePoint.y);
-    setZoom(somePoint.zoom);
-    setIter(somePoint.iter);
-  }, []);
+  const handleKeyDown: KeyboardEventHandler = useCallback(
+    (event) => {
+      const { x, y, zoom, iter } = params;
 
-  const palette = createPalette({
-    0: [1, 1, 1],
-    0.1: [1, 0, 0],
-    0.2: [0, 1, 0],
-    0.3: [0, 0, 1],
-    0.4: [1, 1, 0],
-    0.5: [1, 0, 1],
-    0.6: [0, 1, 1],
-    0.7: [1, 0, 0],
-    0.8: [0, 1, 0],
-    0.9: [0, 0, 1],
-    1: [1, 1, 1],
-  });
-
-  const params: MandelbrotParams = {
-    x,
-    y,
-    iter,
-    zoom,
-    resolution,
-    palette: (n) => {
-      const [r, g, b] = palette((n + colorOffset) % 1).map((n) => n * 255);
-      return `rgb(${r}, ${g}, ${b})`;
-    },
-  };
-
-  const handleKeyDown = useCallback(
-    (key: string) => {
       const handlers: Record<string, () => void> = {
-        ArrowUp: () => setY((y) => y - 100 / zoom),
-        ArrowDown: () => setY((y) => y + 100 / zoom),
-        ArrowLeft: () => setX((x) => x - 100 / zoom),
-        ArrowRight: () => setX((x) => x + 100 / zoom),
-        ' ': () => setZoom((zoom) => zoom * 1.4),
-        z: () => setZoom((zoom) => zoom / 1.4),
-        c: () => setColorOffset((c) => c + 0.01),
-        Enter: () => setIter((iter) => iter + 10),
+        ArrowUp: () => setParams({ y: y - 100 / zoom }),
+        ArrowDown: () => setParams({ y: y + 100 / zoom }),
+        ArrowLeft: () => setParams({ x: x - 100 / zoom }),
+        ArrowRight: () => setParams({ x: x + 100 / zoom }),
+        ' ': () => setParams({ zoom: zoom * 1.4 }),
+        z: () => setParams({ zoom: zoom / 1.4 }),
+        Enter: () => setParams({ iter: iter + 10 }),
       };
 
-      const handler = handlers[key];
-
-      if (handler) {
-        handler();
-        // setResolution(32);
-      }
+      handlers[event.key]?.();
     },
-    [zoom],
+    [params, setParams],
   );
 
-  const handleDrawEnd = () => {
-    if (resolution === 1) {
-      return;
-    }
+  const handleWheel: WheelEventHandler = useCallback(
+    (event) => {
+      const { zoom } = params;
+      const [x, y] = [event.clientX, event.clientY];
 
-    setResolution(resolution / 2);
-  };
+      if (event.deltaY < 0) {
+        setParams({ zoom: zoom * 1.1 });
+      } else {
+        setParams({ zoom: zoom / 1.1 });
+      }
+    },
+    [params, setParams],
+  );
+
+  const handleDrawEnd = useCallback(() => {
+    const { resolution } = params;
+
+    if (resolution > 1) {
+      setParams({ resolution: ~~(resolution / 2) });
+    }
+  }, [params, setParams]);
 
   return (
     <>
       <Mandelbrot
+        tabIndex={0}
         width={window.innerWidth}
         height={window.innerHeight}
         // width={400}
         // height={300}
         params={params}
-        onKeyDown={handleKeyDown}
+        getColor={getColor}
+        onDrawProgress={setProgress}
         onDrawEnd={handleDrawEnd}
+        onKeyDown={handleKeyDown}
+        onWheel={handleWheel}
       />
+
+      <div
+        style={{
+          position: 'absolute',
+          top: 10,
+          right: 10,
+          color: '#999',
+          fontFamily: 'monospace',
+          background: '#000000CC',
+          padding: '2px 4px',
+        }}
+      >
+        Resolution {params.resolution}, progress: {~~(progress * 100)}%
+      </div>
 
       <div
         style={{
@@ -107,7 +146,7 @@ export const App: React.FC = () => {
         {Array(400)
           .fill(0)
           .map((_, n) => (
-            <div key={n} style={{ width: 1, height: 30, background: params.palette(n / 400) }} />
+            <div key={n} style={{ width: 1, height: 30, background: getColor(n / 400) }} />
           ))}
       </div>
     </>
