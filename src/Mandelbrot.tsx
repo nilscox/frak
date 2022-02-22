@@ -23,8 +23,9 @@ type Complex = {
 
 export type WorkerParams = {
   view: {
-    x: Range;
-    y: Range;
+    width: number;
+    height: number;
+    step: number;
   };
   center: Complex;
   zoom: number;
@@ -34,7 +35,7 @@ export type WorkerParams = {
 function draw(
   canvas: HTMLCanvasElement,
   params: MandelbrotParams,
-  getColor: (n: number) => string,
+  getColor: (n: number) => number[],
   onProgress: (progress: number) => void,
   onDrawEnd: () => void,
 ) {
@@ -46,27 +47,25 @@ function draw(
 
   worker = new Worker('worker.js');
 
+  const view = {
+    width: canvas.width,
+    height: canvas.height,
+    step: params.resolution,
+  };
+
+  const center = {
+    re: params.x,
+    im: params.y,
+  };
+
   const workerParams: WorkerParams = {
-    view: {
-      x: {
-        min: -canvas.width / 2,
-        max: canvas.width / 2,
-        step: params.resolution,
-      },
-      y: {
-        min: -canvas.height / 2,
-        max: canvas.height / 2,
-        step: params.resolution,
-      },
-    },
-    center: {
-      re: params.x,
-      im: params.y,
-    },
+    view,
+    center,
     zoom: params.zoom,
     iter: params.iter,
   };
 
+  console.time('worker');
   worker.postMessage(workerParams);
 
   worker.onmessage = (e) => {
@@ -79,26 +78,37 @@ function draw(
       return;
     }
 
-    const values: Array<{ x: number; y: number; value: number }> = e.data.values;
+    console.timeEnd('worker');
+    console.time('render');
 
-    for (const { x, y, value } of values) {
-      ctx.fillStyle = value === 1 ? '#000' : getColor(value);
+    const imageData = ctx.getImageData(0, 0, view.width, view.height);
+    const pixels = imageData.data;
+    const values: Float32Array = e.data.values;
 
-      ctx.fillRect(
-        x - workerParams.view.x.min,
-        y - workerParams.view.y.min,
-        params.resolution,
-        params.resolution,
-      );
+    for (let x = 0; x < view.width; x += view.step) {
+      for (let y = 0; y < view.height; y += view.step) {
+        const value = values[x * view.height + y];
+
+        const color = getColor(value);
+        const offset = (y * view.width + x) * 4;
+
+        pixels[offset + 0] = color[0];
+        pixels[offset + 1] = color[1];
+        pixels[offset + 2] = color[2];
+        pixels[offset + 3] = 255;
+      }
     }
 
+    ctx.putImageData(imageData, 0, 0);
+
+    console.timeEnd('render');
     onDrawEnd();
   };
 }
 
 type MandelbrotProps = HTMLProps<HTMLCanvasElement> & {
   params: MandelbrotParams;
-  getColor: (n: number) => string;
+  getColor: (n: number) => number[];
   onDrawProgress: (progress: number) => void;
   onDrawEnd: () => void;
 };
@@ -117,7 +127,11 @@ export const Mandelbrot: React.FC<MandelbrotProps> = ({
       return;
     }
 
-    draw(ref.current, params, getColor, onDrawProgress, onDrawEnd);
+    console.time('total');
+    draw(ref.current, params, getColor, onDrawProgress, () => {
+      console.timeEnd('total');
+      onDrawEnd();
+    });
   }, [ref, params, getColor, onDrawProgress, onDrawEnd]);
 
   return <canvas ref={ref} {...props} />;

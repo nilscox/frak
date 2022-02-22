@@ -31,9 +31,10 @@ const useMandelbrotParams = (initialParams: MandelbrotParams) => {
 const defaultParams: MandelbrotParams = {
   x: -0.6,
   y: 0,
-  iter: 50,
-  zoom: 200,
-  resolution: 2 << 2,
+  iter: 60,
+  zoom: 500,
+  resolution: 1,
+  // resolution: 2 << 2,
 };
 
 const somePoint: MandelbrotParams = {
@@ -44,24 +45,53 @@ const somePoint: MandelbrotParams = {
   iter: 700,
 };
 
-const colors: Record<number, Color> = {
-  0: [1, 1, 1],
-  0.1: [1, 0, 0],
-  0.2: [0, 1, 0],
-  0.3: [0, 0, 1],
-  0.4: [1, 1, 0],
-  0.5: [1, 0, 1],
-  0.6: [0, 1, 1],
-  0.7: [1, 0, 0],
-  0.8: [0, 1, 0],
-  0.9: [0, 0, 1],
-  1: [1, 1, 1],
+const colors: Record<number, Color> = {};
+
+for (let i = 0; i <= 8; ++i) {
+  colors[i / 8] = [Math.random(), Math.random(), Math.random()];
+}
+
+const palette = [
+  ...Array(255)
+    .fill(0)
+    .map((_, n) => [0, 0, n]),
+  ...Array(255)
+    .fill(0)
+    .map((_, n) => [0, n, 255 - n]),
+  ...Array(255)
+    .fill(0)
+    .map((_, n) => [n, 255 - n, 0]),
+];
+
+const black = [0, 0, 0];
+
+const getColor = (n: number) => {
+  if (n === 1) {
+    return black;
+  }
+
+  return [0, 0, n * 255];
+  // return palette[~~(n * palette.length)];
 };
+
+// const colors: Record<number, Color> = {
+//   0: [1, 1, 1],
+//   0.1: [1, 0, 0],
+//   0.2: [0, 1, 0],
+//   0.3: [0, 0, 1],
+//   0.4: [1, 1, 0],
+//   0.5: [1, 0, 1],
+//   0.6: [0, 1, 1],
+//   0.7: [1, 0, 0],
+//   0.8: [0, 1, 0],
+//   0.9: [0, 0, 1],
+//   1: [1, 1, 1],
+// };
 
 export const App: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [params, setParams] = useMandelbrotParams(defaultParams);
-  const getColor = usePalette(colors);
+  // const getColor = usePalette(colors);
 
   const handleKeyDown: KeyboardEventHandler = useCallback(
     (event) => {
@@ -134,7 +164,7 @@ export const App: React.FC = () => {
         Resolution {params.resolution}, progress: {~~(progress * 100)}%
       </div>
 
-      <div
+      {/* <div
         style={{
           position: 'absolute',
           top: 10,
@@ -149,6 +179,7 @@ export const App: React.FC = () => {
             <div key={n} style={{ width: 1, height: 30, background: getColor(n / 400) }} />
           ))}
       </div>
+       */}
     </>
   );
 };

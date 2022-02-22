@@ -57,6 +57,8 @@ if (NODE_ENV === 'development') {
   config.devServer = {
     host: HOST,
     port: Number(PORT),
+    hot: false,
+    liveReload: true,
     client: {
       logging: 'warn',
     },
